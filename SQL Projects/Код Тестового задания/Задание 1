@@ -1,0 +1,5 @@
+select    user_id
+        , min(transaction_datetime) as first_payment_date
+from skyeng_db.payments
+where status_name = 'success'
+group by user_id
