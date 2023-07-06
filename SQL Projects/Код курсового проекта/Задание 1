@@ -1,0 +1,82 @@
+with first_payments as
+    (
+    select    user_id
+            , date_trunc('day', min(transaction_datetime)) as first_payment_date
+    from skyeng_db.payments
+    where status_name = 'success'
+    group by user_id
+    ),
+all_dates as 
+    (
+    select    distinct date_trunc('day', class_start_datetime) as dt
+    from skyeng_db.classes
+    where date_part('year', class_start_datetime) = 2016
+    ),
+all_dates_by_user as
+    (
+    select    a.user_id
+            , b.dt
+    from first_payments as a
+        join all_dates as b
+            on b.dt >= a.first_payment_date
+    order by user_id, dt
+    ),
+payments_by_dates as
+    (
+    select    user_id
+            , date_trunc('day', transaction_datetime) as payment_date
+            , sum(classes) as transaction_balance_change
+    from skyeng_db.payments as p
+    where p.status_name = 'success'
+    group by user_id, payment_date
+    ),
+payments_by_dates_cumsum as
+    (
+    select    du.user_id
+            , du.dt
+            , pd.transaction_balance_change
+            , sum(transaction_balance_change) over (partition by du.user_id order by du.dt asc) as transaction_balance_change_cs
+    from all_dates_by_user as du
+        left join payments_by_dates as pd
+            on du.dt = pd.payment_date
+                and du.user_id = pd.user_id
+    ),
+classes_by_dates as
+    (
+    select    user_id
+            , date_trunc('day', class_start_datetime) as class_date
+            , count(*) * -1 as classes
+    from skyeng_db.classes
+    where (class_status = 'success' or class_status = 'failed_by_student')
+        and class_type != 'trial'
+    group by class_date, user_id
+    ),
+classes_by_dates_cumcum as
+    (
+    select    du.user_id
+            , du.dt
+            , cbd.classes
+            , sum(classes) over (partition by du.user_id order by du.dt) as classes_cs
+    from all_dates_by_user as du
+        left join classes_by_dates as cbd
+            on du.dt = cbd.class_date
+                and du.user_id = cbd.user_id
+    ),
+balances as 
+    (
+    select    p.user_id
+            , p.dt
+            , p.transaction_balance_change
+            , p.transaction_balance_change_cs
+            , c.classes
+            , c.classes_cs
+            , classes_cs + transaction_balance_change_cs as balance
+    from payments_by_dates_cumsum as p
+        join classes_by_dates_cumcum as c
+            on c.dt = p.dt
+                and c.user_id = p.user_id
+    order by user_id, dt
+    limit 1000
+    )
+select    *
+from balances
