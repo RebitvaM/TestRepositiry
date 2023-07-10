@@ -1,6 +1,0 @@
-select    user_id
-        , transaction_datetime as payment_date
-        , sum(classes) as transaction_balance_change
-from skyeng_db.payments as p
-where p.status_name = 'success'
-group by user_id, payment_date

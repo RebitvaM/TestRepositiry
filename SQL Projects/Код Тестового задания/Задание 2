@@ -1,3 +1,0 @@
-select    distinct date_trunc('day', class_start_datetime) as dt
-from skyeng_db.classes
-where date_part('year', class_start_datetime) = 2016
